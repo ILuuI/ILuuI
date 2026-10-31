@@ -41,12 +41,14 @@ My academic work includes research presentations at RedCOLSI events, the Interna
 
 I also create short educational programming videos through **Fix That Code**, explaining Python behavior and algorithmic improvements through step-by-step animations.
 
-## GitHub activity
+<div align="center">
+  <h2>GitHub activity</h2>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/contributions-dark.svg">
-  <img alt="GitHub contribution calendar" src="./assets/contributions-light.svg">
-</picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/contributions-dark.svg?v=3months">
+    <img alt="GitHub contributions over the last three months" src="./assets/contributions-light.svg?v=3months">
+  </picture>
+</div>
 
 ## Contact
 
