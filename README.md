@@ -41,6 +41,9 @@ My academic work includes research presentations at RedCOLSI events, the Interna
 
 I also create short educational programming videos through **Fix That Code**, explaining Python behavior and algorithmic improvements through step-by-step animations.
 
+## GitHub activity
+![GitHub activity over the last 31 days](https://github-readme-activity-graph.vercel.app/graph?username=ILuuI&bg_color=ffffff&color=334155&title_color=1e40af&line=2563eb&point=1d4ed8&area=true&area_color=dbeafe&hide_border=true&days=31)
+
 ## Contact
 
 - **Email:** [lucas.rivadeneira@unisucrevirtual.edu.co](mailto:lucas.rivadeneira@unisucrevirtual.edu.co)
