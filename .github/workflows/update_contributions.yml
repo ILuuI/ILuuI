@@ -54,9 +54,10 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          from datetime import date
+          from datetime import date, datetime
           from html import escape
           from pathlib import Path
+          from zoneinfo import ZoneInfo
 
           payload = json.loads(
               (Path(os.environ['RUNNER_TEMP']) / 'contributions.json').read_text()
@@ -67,7 +68,18 @@ jobs:
           if not user:
               raise RuntimeError('The repository owner could not be found.')
           calendar = user['contributionsCollection']['contributionCalendar']
-          weeks = calendar['weeks']
+          # Display the current month and the previous two months.
+          today = datetime.now(ZoneInfo('America/Bogota')).date()
+          month_index = today.year * 12 + today.month - 1 - 2
+          start = date(month_index // 12, month_index % 12 + 1, 1)
+          weeks = []
+          for week in calendar['weeks']:
+              days = [
+                  day for day in week['contributionDays']
+                  if start <= date.fromisoformat(day['date']) <= today
+              ]
+              if days:
+                  weeks.append({'contributionDays': days})
           if not weeks or not any(week['contributionDays'] for week in weeks):
               raise RuntimeError('The contribution calendar is empty.')
 
@@ -83,21 +95,24 @@ jobs:
           }
           output = Path('assets')
           output.mkdir(exist_ok=True)
-          width = 60 + len(weeks) * 14
-          total = calendar['totalContributions']
+          width = max(320, 60 + len(weeks) * 14)
+          total = sum(
+              day['contributionCount']
+              for week in weeks for day in week['contributionDays']
+          )
 
           for theme, (background, foreground, colors) in themes.items():
               svg = [
-                  f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 210" '
+                  f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="210" viewBox="0 0 {width} 210" '
                   'role="img" aria-labelledby="title description">',
                   '<title id="title">GitHub contributions</title>',
                   f'<desc id="description">{total} contributions in the calendar '
-                  'returned by GitHub over the past year.</desc>',
+                  f'from {start.isoformat()} through {today.isoformat()}.</desc>',
                   f'<rect width="{width}" height="210" rx="10" fill="{background}"/>',
                   f'<g fill="{foreground}" font-family="Arial, sans-serif" font-size="11">',
                   '<text x="20" y="25" font-size="17" font-weight="bold">'
                   'GitHub contributions</text>',
-                  f'<text x="20" y="45">{total:,} contributions over the past year</text>',
+                  f'<text x="20" y="45">{total:,} contributions · last 3 months</text>',
               ]
               for label, weekday in [('Mon', 1), ('Wed', 3), ('Fri', 5)]:
                   svg.append(f'<text x="10" y="{85 + weekday * 14}">{label}</text>')
@@ -119,6 +134,7 @@ jobs:
                       svg.append(f'<rect x="{x}" y="{y}" width="11" height="11" '
                                  f'rx="2" fill="{fill}"><title>{tooltip}</title></rect>')
 
+              svg.append(f'<text x="20" y="197">{start:%b %d} to {today:%b %d}</text>')
               legend_x = width - 146
               svg.append(f'<text x="{legend_x - 36}" y="197">Less</text>')
               for level, color in enumerate(colors):
