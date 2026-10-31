@@ -1,0 +1,143 @@
+name: Update contribution chart
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 11 * * *'
+  push:
+    paths:
+      - '.github/workflows/update_contributions.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: contribution-chart
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Read contribution calendar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api graphql \
+            -f login="$GITHUB_REPOSITORY_OWNER" \
+            -f query='query($login: String!) {
+              user(login: $login) {
+                contributionsCollection {
+                  contributionCalendar {
+                    totalContributions
+                    weeks {
+                      contributionDays {
+                        date
+                        weekday
+                        contributionCount
+                        contributionLevel
+                      }
+                    }
+                  }
+                }
+              }
+            }' > "$RUNNER_TEMP/contributions.json"
+
+      - name: Generate blue SVG charts
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import date
+          from html import escape
+          from pathlib import Path
+
+          payload = json.loads(
+              (Path(os.environ['RUNNER_TEMP']) / 'contributions.json').read_text()
+          )
+          if payload.get('errors'):
+              raise RuntimeError('GitHub could not return the contribution calendar.')
+          user = payload.get('data', {}).get('user')
+          if not user:
+              raise RuntimeError('The repository owner could not be found.')
+          calendar = user['contributionsCollection']['contributionCalendar']
+          weeks = calendar['weeks']
+          if not weeks or not any(week['contributionDays'] for week in weeks):
+              raise RuntimeError('The contribution calendar is empty.')
+
+          levels = {
+              'NONE': 0, 'FIRST_QUARTILE': 1, 'SECOND_QUARTILE': 2,
+              'THIRD_QUARTILE': 3, 'FOURTH_QUARTILE': 4,
+          }
+          themes = {
+              'light': ('#ffffff', '#334155',
+                        ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb', '#1e40af']),
+              'dark': ('#0d1117', '#cbd5e1',
+                       ['#161b22', '#0c2d6b', '#1d4ed8', '#3b82f6', '#93c5fd']),
+          }
+          output = Path('assets')
+          output.mkdir(exist_ok=True)
+          width = 60 + len(weeks) * 14
+          total = calendar['totalContributions']
+
+          for theme, (background, foreground, colors) in themes.items():
+              svg = [
+                  f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 210" '
+                  'role="img" aria-labelledby="title description">',
+                  '<title id="title">GitHub contributions</title>',
+                  f'<desc id="description">{total} contributions in the calendar '
+                  'returned by GitHub over the past year.</desc>',
+                  f'<rect width="{width}" height="210" rx="10" fill="{background}"/>',
+                  f'<g fill="{foreground}" font-family="Arial, sans-serif" font-size="11">',
+                  '<text x="20" y="25" font-size="17" font-weight="bold">'
+                  'GitHub contributions</text>',
+                  f'<text x="20" y="45">{total:,} contributions over the past year</text>',
+              ]
+              for label, weekday in [('Mon', 1), ('Wed', 3), ('Fri', 5)]:
+                  svg.append(f'<text x="10" y="{85 + weekday * 14}">{label}</text>')
+
+              previous_month = None
+              for index, week in enumerate(weeks):
+                  days = week['contributionDays']
+                  x = 40 + index * 14
+                  if days:
+                      month = date.fromisoformat(days[0]['date'])
+                      month_key = (month.year, month.month)
+                      if month_key != previous_month:
+                          svg.append(f'<text x="{x}" y="66">{month:%b}</text>')
+                          previous_month = month_key
+                  for day in days:
+                      fill = colors[levels[day['contributionLevel']]]
+                      y = 76 + day['weekday'] * 14
+                      tooltip = escape(f"{day['date']}: {day['contributionCount']} contributions")
+                      svg.append(f'<rect x="{x}" y="{y}" width="11" height="11" '
+                                 f'rx="2" fill="{fill}"><title>{tooltip}</title></rect>')
+
+              legend_x = width - 146
+              svg.append(f'<text x="{legend_x - 36}" y="197">Less</text>')
+              for level, color in enumerate(colors):
+                  svg.append(f'<rect x="{legend_x + level * 14}" y="187" '
+                             f'width="11" height="11" rx="2" fill="{color}"/>')
+              svg.append(f'<text x="{legend_x + 78}" y="197">More</text>')
+              svg.append('</g></svg>')
+              (output / f'contributions-{theme}.svg').write_text(
+                  '\n'.join(svg) + '\n', encoding='utf-8'
+              )
+          PY
+
+      - name: Save updated charts
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/contributions-light.svg assets/contributions-dark.svg
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m '[docs] update contribution charts'
+          git push
