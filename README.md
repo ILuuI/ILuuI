@@ -1,4 +1,4 @@
-# Lucas Mateo Rivadeneira Zarza
+# Lucas Rivadeneira Zarza
 
 **Electronic Engineering Student | Artificial Intelligence | Computer Vision | Backend Development | Data Analysis**
 
